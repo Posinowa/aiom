@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { UserCircle, CheckSquare, ShieldCheck } from 'lucide-react';
+import { UserCircle, CheckSquare } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, getDocs, doc, updateDoc, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 
 export default function Dashboard() {
@@ -12,26 +12,18 @@ export default function Dashboard() {
   const [members, setMembers] = useState<{ id: string; name: string; isPresent: boolean }[]>([]);
   const [tasks, setTasks] = useState<string[]>([]);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   const router = useRouter();
 
   const auth = getAuth();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!user) {
-        router.push('/');
+        router.push('/'); // Giriş yapmamışsa login sayfasına
+      } else if (user.email === 'admin@ai.com') {
+        router.push('/admin'); // Admin bu sayfayı görmesin
       } else {
         setUserEmail(user.email);
-
-        const snapshot = await getDocs(
-          query(collection(db, 'uyeler'), where('name', '==', user.email))
-        );
-
-        if (!snapshot.empty) {
-          const role = snapshot.docs[0].data().role;
-          setIsAdmin(role === 'admin');
-        }
       }
     });
 
@@ -74,14 +66,6 @@ export default function Dashboard() {
           >
             <CheckSquare className="w-5 h-5" /> My Tasks
           </button>
-          {isAdmin && (
-            <button
-              onClick={() => router.push('/admin')}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg w-full text-left text-blue-600 hover:bg-blue-100 border-t pt-4"
-            >
-              <ShieldCheck className="w-5 h-5" /> Admin Paneline Git
-            </button>
-          )}
         </nav>
       </aside>
 

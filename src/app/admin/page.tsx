@@ -8,7 +8,6 @@ import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/fire
 import MealList from './components/MealList';
 import CleaningTasks from './components/CleaningTasks';
 import TaskHistory from './components/TaskHistory';
-
 import {
   ClipboardList,
   UtensilsCrossed,
@@ -31,9 +30,8 @@ export default function AdminDashboard() {
         return;
       }
 
-      const snapshot = await getDocs(
-        query(collection(db, 'uyeler'), where('name', '==', user.email))
-      );
+      const q = query(collection(db, 'uyeler'), where('email', '==', user.email));
+      const snapshot = await getDocs(q);
 
       if (!snapshot.empty) {
         const role = snapshot.docs[0].data().role;
@@ -101,34 +99,19 @@ export default function AdminDashboard() {
     <div className="min-h-screen flex flex-col md:flex-row bg-gray-100">
       <aside className="w-full md:w-64 bg-white text-black p-4 space-y-4 border-b md:border-b-0 md:border-r">
         <h1 className="text-xl font-bold mb-6">AI OFFICE MANAGER</h1>
-        <button
-          onClick={() => setSelected('tasks')}
-          className={`flex items-center gap-2 w-full px-4 py-2 rounded-lg text-left ${selected === 'tasks' ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-        >
+        <button onClick={() => setSelected('tasks')} className={`flex items-center gap-2 w-full px-4 py-2 rounded-lg text-left ${selected === 'tasks' ? 'bg-gray-200' : 'hover:bg-gray-100'}`}>
           <ClipboardList className="w-5 h-5" /> Task Assignments
         </button>
-        <button
-          onClick={() => setSelected('meals')}
-          className={`flex items-center gap-2 w-full px-4 py-2 rounded-lg text-left ${selected === 'meals' ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-        >
+        <button onClick={() => setSelected('meals')} className={`flex items-center gap-2 w-full px-4 py-2 rounded-lg text-left ${selected === 'meals' ? 'bg-gray-200' : 'hover:bg-gray-100'}`}>
           <UtensilsCrossed className="w-5 h-5" /> Meal List
         </button>
-        <button
-          onClick={() => setSelected('cleaning')}
-          className={`flex items-center gap-2 w-full px-4 py-2 rounded-lg text-left ${selected === 'cleaning' ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-        >
+        <button onClick={() => setSelected('cleaning')} className={`flex items-center gap-2 w-full px-4 py-2 rounded-lg text-left ${selected === 'cleaning' ? 'bg-gray-200' : 'hover:bg-gray-100'}`}>
           <Brush className="w-5 h-5" /> Cleaning Tasks
         </button>
-        <button
-          onClick={() => setSelected('status')}
-          className={`flex items-center gap-2 w-full px-4 py-2 rounded-lg text-left ${selected === 'status' ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-        >
+        <button onClick={() => setSelected('status')} className={`flex items-center gap-2 w-full px-4 py-2 rounded-lg text-left ${selected === 'status' ? 'bg-gray-200' : 'hover:bg-gray-100'}`}>
           <Users2 className="w-5 h-5" /> Member Status
         </button>
-        <button
-          onClick={() => setSelected('history')}
-          className={`flex items-center gap-2 w-full px-4 py-2 rounded-lg text-left ${selected === 'history' ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-        >
+        <button onClick={() => setSelected('history')} className={`flex items-center gap-2 w-full px-4 py-2 rounded-lg text-left ${selected === 'history' ? 'bg-gray-200' : 'hover:bg-gray-100'}`}>
           📜 Task History
         </button>
       </aside>
