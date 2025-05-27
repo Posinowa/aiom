@@ -1,7 +1,6 @@
-// Güncellenmiş login sayfası - mobil uyumlu (responsive)
-
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   signInWithEmailAndPassword,
@@ -10,8 +9,15 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth, db } from '../../lib/firebase';
-import { useState } from 'react';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  setDoc,
+  doc,
+  serverTimestamp,
+} from 'firebase/firestore';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,25 +28,36 @@ export default function LoginPage() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      const role = user.email === 'admin@ai.com' ? 'admin' : 'member';
+
+      const q = query(collection(db, 'uyeler'), where('email', '==', user.email));
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        alert('Sistemde kayıtlı kullanıcı bulunamadı.');
+        return;
+      }
+
+      const role = snapshot.docs[0].data().role || 'member';
 
       if (role === 'member' && !user.emailVerified) {
         alert('Lütfen e-posta adresinizi doğrulayın.');
         return;
       }
 
-      await setDoc(doc(db, 'userLogins', user.uid), {
-        name: user.displayName || '',
+      await setDoc(doc(db, 'userLogs', `${user.uid}_${Date.now()}`), {
+        uid: user.uid,
         email: user.email,
         role,
-        lastLogin: serverTimestamp(),
+        loginAt: serverTimestamp(),
       });
 
       document.cookie = `role=${role}; path=/`;
-      router.push(role === 'admin' ? '/admin' : '/member');
+
+      // Her zaman /member sayfasına yönlendir, admin paneli oradan açılır
+      router.push('/member');
+
     } catch (err) {
-      const error = err as Error;
-      alert('Giriş başarısız: ' + error.message);
+      alert('Giriş başarısız: ' + (err as Error).message);
     }
   };
 
@@ -49,13 +66,29 @@ export default function LoginPage() {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      const role = user.email === 'admin@ai.com' ? 'admin' : 'member';
+
+      const q = query(collection(db, 'uyeler'), where('email', '==', user.email));
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        alert('Sistemde kayıtlı kullanıcı bulunamadı.');
+        return;
+      }
+
+      const role = snapshot.docs[0].data().role || 'member';
+
+      await setDoc(doc(db, 'userLogs', `${user.uid}_${Date.now()}`), {
+        uid: user.uid,
+        email: user.email,
+        role,
+        loginAt: serverTimestamp(),
+      });
 
       document.cookie = `role=${role}; path=/`;
-      router.push(role === 'admin' ? '/admin' : '/member');
+      router.push('/member');
+
     } catch (err) {
-      const error = err as Error;
-      alert('Google ile giriş başarısız: ' + error.message);
+      alert('Google ile giriş başarısız: ' + (err as Error).message);
     }
   };
 
@@ -65,11 +98,7 @@ export default function LoginPage() {
       await sendPasswordResetEmail(auth, email);
       alert('Parola sıfırlama bağlantısı e-posta adresinize gönderildi.');
     } catch (err: any) {
-      if (err.code === 'auth/user-not-found') {
-        alert('Bu e-posta adresi sistemde kayıtlı değil.');
-      } else {
-        alert('Hata: ' + err.message);
-      }
+      alert('Hata: ' + err.message);
     }
   };
 
@@ -80,7 +109,6 @@ export default function LoginPage() {
           AI OFFICE MANAGER
         </h1>
 
-        <label className="block text-sm font-semibold mb-1 text-[#1f1f1f]">Email</label>
         <input
           type="email"
           value={email}
@@ -88,8 +116,6 @@ export default function LoginPage() {
           placeholder="Email"
           className="w-full mb-4 px-4 py-2 border rounded focus:outline-none bg-white text-black"
         />
-
-        <label className="block text-sm font-semibold mb-1 text-[#1f1f1f]">Password</label>
         <input
           type="password"
           value={password}

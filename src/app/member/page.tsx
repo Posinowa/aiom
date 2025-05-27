@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { UserCircle, CheckSquare, ShieldCheck } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, getDocs, doc, updateDoc, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 
 export default function Dashboard() {
@@ -24,8 +24,9 @@ export default function Dashboard() {
       } else {
         setUserEmail(user.email);
 
+        // 🔧 BURASI DÜZELTİLDİ: 'name' → 'email'
         const snapshot = await getDocs(
-          query(collection(db, 'uyeler'), where('name', '==', user.email))
+          query(collection(db, 'uyeler'), where('email', '==', user.email))
         );
 
         if (!snapshot.empty) {
@@ -74,6 +75,8 @@ export default function Dashboard() {
           >
             <CheckSquare className="w-5 h-5" /> My Tasks
           </button>
+
+          {/* 🔐 SADECE ADMINLER GÖRÜR */}
           {isAdmin && (
             <button
               onClick={() => router.push('/admin')}
