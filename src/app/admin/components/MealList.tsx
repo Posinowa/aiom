@@ -12,6 +12,8 @@ import {
   doc,
   updateDoc,
 } from "firebase/firestore";
+import { approveTaskAndAssignToUser } from '../components/utils/approveTaskAndAssign';
+
 
 type MealTask = {
   id: string;
@@ -29,7 +31,7 @@ type MealPlace = {
 const GIRL_NAMES = ["esma sahin", "dilara yilmaz", "feyza sahin"];
 
 export default function MealTasks() {
-  const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
+  const [members, setMembers] = useState<{ id: string; name: string; email?: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [tasks, setTasks] = useState<MealTask[]>([]);
   const [assignCount, setAssignCount] = useState<number>(2);
@@ -45,7 +47,15 @@ export default function MealTasks() {
         query(collection(db, "uyeler"), where("isPresent", "==", true))
       );
       const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as any[];
-      setMembers(data.filter((d) => d.name !== "admin@ai.com"));
+      setMembers(
+        data
+          .filter((d) => d.name !== "admin@ai.com")
+          .map((d) => ({
+            id: d.id,
+            name: d.name,
+            email: d.email, // ensure email is included if present
+          }))
+      );
     };
 
     const fetchPlaces = async () => {
@@ -121,6 +131,12 @@ export default function MealTasks() {
     const ref = doc(db, "yemekGorevleri", task.id);
     await updateDoc(ref, { durum: "onaylandı" });
     setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, durum: "onaylandı" } : t)));
+
+    await approveTaskAndAssignToUser({
+      ...task,
+      assignedEmail: members.find(m => m.name === task.atanan)?.email,
+      id: task.id
+    });
   };
 
   const markAsDone = async (task: MealTask) => {
@@ -222,10 +238,10 @@ export default function MealTasks() {
                 <div className="flex items-center gap-2">
                   <span
                     className={`text-xs px-2 py-1 rounded-full font-medium ${task.durum === "tamamlandı"
-                        ? "bg-green-100 text-green-800"
-                        : task.durum === "onaylandı"
-                          ? "bg-blue-100 text-blue-800"
-                          : "bg-gray-100 text-gray-800"
+                      ? "bg-green-100 text-green-800"
+                      : task.durum === "onaylandı"
+                        ? "bg-blue-100 text-blue-800"
+                        : "bg-gray-100 text-gray-800"
                       }`}
                   >
                     {task.durum}

@@ -1,90 +1,67 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db } from '../../lib/firebase';
-import { getAuth } from 'firebase/auth';
 import {
     collection,
     getDocs,
-    query,
-    where,
-    doc,
     updateDoc,
+    doc,
     addDoc,
+    onSnapshot,
 } from 'firebase/firestore';
-type Task = {
+
+interface Task {
     id: string;
     atanan: string;
     tarih: any;
     durum: string;
-    gorev: string; // ❌ bu çözüm önerilmez, type checking zayıflar
-};
+    yer: string;
+}
 
 export default function MyTasks() {
-    const auth = getAuth();
     const [tasks, setTasks] = useState<Task[]>([]);
+    const [userUid, setUserUid] = useState<string | null>(null);
+    const auth = getAuth();
 
     useEffect(() => {
-        const fetchMyTasks = async () => {
-            const currentUser = auth.currentUser;
-            if (!currentUser) return;
-            const todayStr = new Date().toDateString();
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                setUserUid(user.uid);
+            }
+        });
 
-            // Yemek görevlerini çek
-            const mealQuery = query(
-                collection(db, 'yemekGorevleri'),
-                where('email', '==', currentUser.email),
-                where('durum', '==', 'onaylandı')
-            );
-
-            // Temizlik görevlerini çek
-            const cleanQuery = query(
-                collection(db, 'temizlikGorevleri'),
-                where('email', '==', currentUser.email),
-                where('durum', '==', 'onaylandı')
-            );
-
-            // İkisini birden al
-            const [mealSnap, cleanSnap] = await Promise.all([
-                getDocs(mealQuery),
-                getDocs(cleanQuery),
-            ]);
-
-            // Yemek görevlerini dönüştür
-            const meals = mealSnap.docs.map((doc) => ({
-                id: doc.id,
-                ...(doc.data() as Omit<Task, 'id' | 'gorev'>),
-                gorev: 'yemek',
-            }));
-
-            // Temizlik görevlerini dönüştür
-            const cleans = cleanSnap.docs.map((doc) => ({
-                id: doc.id,
-                ...(doc.data() as Omit<Task, 'id' | 'gorev'>),
-                gorev: 'temizlik',
-            }));
-
-            // Sadece bugünkü görevler
-            const combined = [...meals, ...cleans].filter(
-                (task) =>
-                    new Date(task.tarih?.seconds * 1000).toDateString() === todayStr
-            );
-
-            setTasks(combined);
-        };
-
-        fetchMyTasks();
+        return () => unsubscribe();
     }, []);
 
-    // Görevi tamamlandı olarak işaretle
+    useEffect(() => {
+        if (!userUid) return;
+
+        const unsubscribeTasks = onSnapshot(
+            collection(db, `users/${userUid}/tasks`),
+            (snapshot) => {
+                const data = snapshot.docs.map((doc) => ({
+                    id: doc.id,
+                    ...doc.data(),
+                })) as Task[];
+                setTasks(data);
+            }
+        );
+
+        return () => unsubscribeTasks();
+    }, [userUid]);
+
     const markAsDone = async (task: Task) => {
-        const ref = doc(db, task.gorev === 'yemek' ? 'yemekGorevleri' : 'temizlikGorevleri', task.id);
-        await updateDoc(ref, { durum: 'tamamlandı' });
+        if (!userUid) return;
+
+        const taskRef = doc(db, `users/${userUid}/tasks`, task.id);
+        await updateDoc(taskRef, { durum: 'tamamlandı' });
 
         await addDoc(collection(db, 'gorevGecmisi'), {
             atanan: task.atanan,
             tarih: task.tarih,
-            gorev: task.gorev,
+            gorev: 'temizlik',
         });
 
         setTasks((prev) =>
@@ -93,44 +70,63 @@ export default function MyTasks() {
     };
 
     return (
-        <div className="p-6 bg-white rounded-xl shadow mt-6">
-            <h2 className="text-xl font-bold mb-4">Bugünkü Görevlerim</h2>
+        <div className="p-4">
+            <h2 className="text-3xl font-bold mb-6">My Tasks</h2>
+
             {tasks.length === 0 ? (
-                <p className="text-gray-500">Bugün için atanmış bir göreviniz yok.</p>
+                <p className="text-gray-500 bg-white p-4 rounded shadow">
+                    Şu anda atanan bir göreviniz yok.
+                </p>
             ) : (
-                <ul className="space-y-4">
-                    {tasks.map((task, i) => (
-                        <li
-                            key={i}
-                            className="flex justify-between items-center border-b pb-2 last:border-none"
-                        >
-                            <div>
-                                <p className="font-medium capitalize">{task.gorev} görevi</p>
-                                <p className="text-sm text-gray-500">
-                                    {new Date(task.tarih?.seconds * 1000).toLocaleDateString()}
-                                </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span
-                                    className={`text-xs px-2 py-1 rounded-full font-medium ${task.durum === 'tamamlandı'
-                                        ? 'bg-green-100 text-green-800'
-                                        : 'bg-yellow-100 text-yellow-800'
-                                        }`}
-                                >
-                                    {task.durum}
-                                </span>
-                                {task.durum !== 'tamamlandı' && (
-                                    <button
-                                        onClick={() => markAsDone(task)}
-                                        className="text-xs bg-green-500 text-white px-3 py-1 rounded"
+                <div className="space-y-4">
+                    {tasks.map((task) => {
+                        const timestamp = task.tarih?.seconds
+                            ? new Date(task.tarih.seconds * 1000)
+                            : null;
+
+                        const formattedDate = timestamp
+                            ? timestamp.toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                            })
+                            : 'Tarih yok';
+
+                        const durumRengi =
+                            task.durum === 'tamamlandı'
+                                ? 'bg-green-100 text-green-800'
+                                : task.durum === 'onaylandı'
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : 'bg-orange-100 text-orange-800';
+
+                        return (
+                            <div
+                                key={task.id}
+                                className="bg-white rounded-xl shadow p-5 flex justify-between items-center"
+                            >
+                                <div className="text-lg font-semibold text-black">
+                                    {task.yer || 'Bilinmeyen Görev'}
+                                </div>
+                                <div className="text-right space-y-1">
+                                    <div
+                                        className={`text-xs inline-block px-3 py-1 rounded-full font-medium ${durumRengi}`}
                                     >
-                                        Yapıldı
-                                    </button>
-                                )}
+                                        {task.durum}
+                                    </div>
+                                    <div className="text-sm text-gray-500">{formattedDate}</div>
+                                    {task.durum === 'onaylandı' && (
+                                        <button
+                                            onClick={() => markAsDone(task)}
+                                            className="mt-1 text-xs bg-green-600 text-white px-3 py-1 rounded"
+                                        >
+                                            Tamamla
+                                        </button>
+                                    )}
+                                </div>
                             </div>
-                        </li>
-                    ))}
-                </ul>
+                        );
+                    })}
+                </div>
             )}
         </div>
     );

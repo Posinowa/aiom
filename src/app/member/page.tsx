@@ -6,11 +6,11 @@ import { UserCircle, CheckSquare, ShieldCheck } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { collection, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import MyTasks from './components/MyTasks';
 
 export default function Dashboard() {
   const [selected, setSelected] = useState<'status' | 'tasks'>('status');
   const [members, setMembers] = useState<{ id: string; name: string; isPresent: boolean }[]>([]);
-  const [tasks, setTasks] = useState<string[]>([]);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const router = useRouter();
@@ -24,7 +24,6 @@ export default function Dashboard() {
       } else {
         setUserEmail(user.email);
 
-        // 🔧 BURASI DÜZELTİLDİ: 'name' → 'email'
         const snapshot = await getDocs(
           query(collection(db, 'uyeler'), where('email', '==', user.email))
         );
@@ -41,19 +40,12 @@ export default function Dashboard() {
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'uyeler'), (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      const data = snapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((doc: any) => doc.name?.trim() !== "" && doc.isMember !== false);
       setMembers(data as any);
     });
 
-    const fetchTasks = async () => {
-      const currentUser = auth.currentUser;
-      if (!currentUser) return;
-      const snapshot = await getDocs(collection(db, `users/${currentUser.uid}/tasks`));
-      const data = snapshot.docs.map((doc) => doc.data().title);
-      setTasks(data);
-    };
-
-    fetchTasks();
     return () => unsubscribe();
   }, []);
 
@@ -76,7 +68,6 @@ export default function Dashboard() {
             <CheckSquare className="w-5 h-5" /> My Tasks
           </button>
 
-          {/* 🔐 SADECE ADMINLER GÖRÜR */}
           {isAdmin && (
             <button
               onClick={() => router.push('/admin')}
@@ -114,16 +105,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {selected === 'tasks' && (
-          <div>
-            <h2 className="text-2xl font-semibold mb-4">My Tasks</h2>
-            <div className="bg-white rounded-xl p-4 shadow space-y-2 text-sm">
-              {tasks.map((task, i) => (
-                <div key={i} className="border-b pb-2 last:border-0 last:pb-0">{task}</div>
-              ))}
-            </div>
-          </div>
-        )}
+        {selected === 'tasks' && <MyTasks />}
       </main>
     </div>
   );
