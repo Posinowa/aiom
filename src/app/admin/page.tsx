@@ -25,24 +25,22 @@ export default function AdminDashboard() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        router.push('/');  // Eğer kullanıcı giriş yapmamışsa giriş sayfasına yönlendir
+        router.push('/');
         return;
       }
 
-      // Kullanıcının rolünü kontrol et
       const q = query(collection(db, 'uyeler'), where('email', '==', user.email));
       const snapshot = await getDocs(q);
 
       if (!snapshot.empty) {
         const role = snapshot.docs[0].data().role;
         if (role !== 'admin') {
-          // Eğer admin değilse, member sayfasına yönlendir
           router.push('/member');
         } else {
-          setCheckingAuth(false);  // Eğer adminse, admin paneline yönlendirmeye devam et
+          setCheckingAuth(false);
         }
       } else {
-        router.push('/');  // Eğer user Firestore'da yoksa giriş sayfasına yönlendir
+        router.push('/');
       }
     });
 
@@ -52,11 +50,14 @@ export default function AdminDashboard() {
   useEffect(() => {
     const fetchMembers = async () => {
       const snapshot = await getDocs(collection(db, 'uyeler'));
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      const data = snapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((doc: any) => doc.isMember !== false); // sadece ofis üyeleri
       setMembers(data as any);
     };
     fetchMembers();
   }, []);
+
 
   const togglePresence = async (id: string, current: boolean) => {
     const ref = doc(db, 'uyeler', id);
@@ -75,11 +76,16 @@ export default function AdminDashboard() {
     );
   };
 
-  if (checkingAuth) return null;
+  if (checkingAuth) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-white">
+        <span className="text-gray-600 text-sm animate-pulse">Yükleniyor...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-gray-100">
-      {/* Sidebar */}
       <aside className="w-full md:w-64 bg-white text-black p-4 space-y-4 border-b md:border-b-0 md:border-r">
         <h1 className="text-xl font-bold mb-6">AI OFFICE MANAGER</h1>
 
@@ -98,7 +104,6 @@ export default function AdminDashboard() {
         </button>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 p-4 md:p-10 text-[#1f1f1f]">
         {selected === 'tasks' && (
           <div>
@@ -158,26 +163,18 @@ export default function AdminDashboard() {
                 className="grid grid-cols-3 py-2 border-b last:border-none items-center"
               >
                 <span className="text-[#1f1f1f] font-medium text-left">{member.name}</span>
-
                 <div className="flex justify-center">
                   <button
                     onClick={() => togglePresence(member.id, member.isPresent)}
-                    className={`px-3 py-1 rounded-full text-xs font-semibold ${member.isPresent
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-gray-100 text-gray-800'
-                      }`}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold ${member.isPresent ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
                   >
                     {member.isPresent ? 'Ofiste' : 'Dışarıda'}
                   </button>
                 </div>
-
                 <div className="flex justify-end">
                   <button
                     onClick={() => toggleAdmin(member.id, member.role)}
-                    className={`px-3 py-1 rounded-full text-xs font-semibold transition duration-150 ${member.role === 'admin'
-                      ? 'bg-red-100 text-red-800 hover:bg-red-200'
-                      : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
-                      }`}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold transition duration-150 ${member.role === 'admin' ? 'bg-red-100 text-red-800 hover:bg-red-200' : 'bg-blue-100 text-blue-800 hover:bg-blue-200'}`}
                   >
                     {member.role === 'admin' ? 'Adminliği Kaldır' : 'Admin Yap'}
                   </button>
