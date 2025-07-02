@@ -4,7 +4,13 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { UserCircle, CheckSquare, ShieldCheck } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, getDocs, onSnapshot, query, where } from 'firebase/firestore';
+import {
+  collection,
+  getDocs,
+  onSnapshot,
+  query,
+  where,
+} from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import MyTasks from './components/MyTasks';
 
@@ -12,6 +18,7 @@ export default function Dashboard() {
   const [selected, setSelected] = useState<'status' | 'tasks'>('status');
   const [members, setMembers] = useState<{ id: string; name: string; isPresent: boolean }[]>([]);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [companyID, setCompanyID] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const router = useRouter();
 
@@ -24,13 +31,13 @@ export default function Dashboard() {
       } else {
         setUserEmail(user.email);
 
-        const snapshot = await getDocs(
-          query(collection(db, 'uyeler'), where('email', '==', user.email))
-        );
+        const q = query(collection(db, 'users'), where('email', '==', user.email));
+        const snapshot = await getDocs(q);
 
         if (!snapshot.empty) {
-          const role = snapshot.docs[0].data().role;
-          setIsAdmin(role === 'admin');
+          const userData = snapshot.docs[0].data();
+          setIsAdmin(userData.role === 'admin');
+          setCompanyID(userData.companyID);
         }
       }
     });
@@ -39,15 +46,20 @@ export default function Dashboard() {
   }, [auth, router]);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'uyeler'), (snapshot) => {
+    if (!companyID) return;
+
+    const q = query(collection(db, 'users'), where('companyID', '==', companyID));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter((doc: any) => doc.name?.trim() !== "" && doc.isMember !== false);
+        .filter((doc: any) => doc.name?.trim() !== "");
+
       setMembers(data as any);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [companyID]);
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row">
@@ -92,10 +104,11 @@ export default function Dashboard() {
                 >
                   <span>{member.name}</span>
                   <span
-                    className={`px-3 py-1 rounded-full ${member.isPresent
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-gray-100 text-gray-800'
-                      }`}
+                    className={`px-3 py-1 rounded-full ${
+                      member.isPresent
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}
                   >
                     {member.isPresent ? 'Ofiste' : 'Dışarıda'}
                   </span>

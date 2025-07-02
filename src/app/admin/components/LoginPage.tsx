@@ -7,6 +7,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   sendPasswordResetEmail,
+  User,
 } from 'firebase/auth';
 import { auth, db } from '../../lib/firebase';
 import {
@@ -29,7 +30,7 @@ export default function LoginPage() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      const q = query(collection(db, 'uyeler'), where('email', '==', user.email));
+      const q = query(collection(db, 'users'), where('email', '==', user.email));
       const snapshot = await getDocs(q);
 
       if (snapshot.empty) {
@@ -37,23 +38,28 @@ export default function LoginPage() {
         return;
       }
 
-      const role = snapshot.docs[0].data().role || 'member';
+      const userData = snapshot.docs[0].data();
+      const role = userData.role || 'member';
 
-      if (role === 'member' && !user.emailVerified) {
-        alert('Lütfen e-posta adresinizi doğrulayın.');
-        return;
-      }
+  if (role === 'member' && !user.emailVerified) {
+  await sendEmailVerification(user);
+  alert('E-posta adresinizi henüz doğrulamadınız. Yeni bir doğrulama bağlantısı gönderildi.');
+  await auth.signOut();
+  return;
+}
+
 
       await setDoc(doc(db, 'userLogs', `${user.uid}_${Date.now()}`), {
         uid: user.uid,
         email: user.email,
         role,
         loginAt: serverTimestamp(),
+        companyID: userData.companyID,
       });
 
       document.cookie = `role=${role}; path=/`;
+      document.cookie = `companyID=${userData.companyID}; path=/`;
 
-      // Her zaman /member sayfasına yönlendir, admin paneli oradan açılır
       router.push('/member');
 
     } catch (err) {
@@ -67,7 +73,7 @@ export default function LoginPage() {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      const q = query(collection(db, 'uyeler'), where('email', '==', user.email));
+      const q = query(collection(db, 'users'), where('email', '==', user.email));
       const snapshot = await getDocs(q);
 
       if (snapshot.empty) {
@@ -75,16 +81,20 @@ export default function LoginPage() {
         return;
       }
 
-      const role = snapshot.docs[0].data().role || 'member';
+      const userData = snapshot.docs[0].data();
+      const role = userData.role || 'member';
 
       await setDoc(doc(db, 'userLogs', `${user.uid}_${Date.now()}`), {
         uid: user.uid,
         email: user.email,
         role,
         loginAt: serverTimestamp(),
+        companyID: userData.companyID,
       });
 
       document.cookie = `role=${role}; path=/`;
+      document.cookie = `companyID=${userData.companyID}; path=/`;
+
       router.push('/member');
 
     } catch (err) {
@@ -158,3 +168,7 @@ export default function LoginPage() {
     </div>
   );
 }
+function sendEmailVerification(user: User) {
+  throw new Error('Function not implemented.');
+}
+

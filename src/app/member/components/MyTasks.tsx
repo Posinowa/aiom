@@ -53,21 +53,22 @@ export default function MyTasks() {
     }, [userUid]);
 
     const markAsDone = async (task: Task) => {
-        if (!userUid) return;
+  if (!userUid) return;
 
-        const taskRef = doc(db, `users/${userUid}/tasks`, task.id);
-        await updateDoc(taskRef, { durum: 'tamamlandı' });
+  const taskRef = doc(db, `users/${userUid}/tasks`, task.id);
+  await updateDoc(taskRef, { durum: 'tamamlandı' });
 
-        await addDoc(collection(db, 'gorevGecmisi'), {
-            atanan: task.atanan,
-            tarih: task.tarih,
-            gorev: 'temizlik',
-        });
+  await addDoc(collection(db, `users/${userUid}/logs`), {
+    atanan: task.atanan,
+    tarih: task.tarih,
+    gorev: 'temizlik', // veya dışarıdan gelen props ile dinamikleştirilebilir
+  });
 
-        setTasks((prev) =>
-            prev.map((t) => (t.id === task.id ? { ...t, durum: 'tamamlandı' } : t))
-        );
-    };
+  setTasks((prev) =>
+    prev.map((t) => (t.id === task.id ? { ...t, durum: 'tamamlandı' } : t))
+  );
+};
+
 
     return (
         <div className="p-4">

@@ -2,8 +2,13 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from 'firebase/auth';
-import { auth } from '../../lib/firebase';
+import {
+  createUserWithEmailAndPassword,
+  updateProfile,
+  sendEmailVerification,
+} from 'firebase/auth';
+import { auth, db } from '../../lib/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { User, Mail, Lock } from 'lucide-react';
 
 export default function RegisterPage() {
@@ -27,11 +32,23 @@ export default function RegisterPage() {
         displayName: displayName,
       });
 
+      // Firestore → users/{uid} altında kullanıcıyı oluştur
+      await setDoc(doc(db, 'users', user.uid), {
+        uid: user.uid,
+        email,
+        name: displayName,
+        role: 'member',
+        isPresent: true,
+        companyID: 'defaultCompany',
+        createdAt: serverTimestamp(),
+      });
+
       await sendEmailVerification(user);
       await auth.signOut();
 
       alert('Kayıt başarılı! E-posta doğrulama bağlantısı gönderildi. Lütfen e-postanızı onaylayın.');
       router.push('/');
+
     } catch (error) {
       alert('Kayıt başarısız: ' + (error as Error).message);
     }

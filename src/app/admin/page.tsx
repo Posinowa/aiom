@@ -21,6 +21,7 @@ export default function AdminDashboard() {
   const [members, setMembers] = useState<{ id: string; name: string; isPresent: boolean; role: string }[]>([]);
   const [selected, setSelected] = useState<'tasks' | 'meals' | 'cleaning' | 'status' | 'history'>('tasks');
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [companyID, setCompanyID] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -29,14 +30,18 @@ export default function AdminDashboard() {
         return;
       }
 
-      const q = query(collection(db, 'uyeler'), where('email', '==', user.email));
+      const q = query(collection(db, 'users'), where('email', '==', user.email));
       const snapshot = await getDocs(q);
 
       if (!snapshot.empty) {
-        const role = snapshot.docs[0].data().role;
+        const userData = snapshot.docs[0].data();
+        const role = userData.role;
+        const company = userData.companyID;
+
         if (role !== 'admin') {
           router.push('/member');
         } else {
+          setCompanyID(company);
           setCheckingAuth(false);
         }
       } else {
@@ -47,20 +52,35 @@ export default function AdminDashboard() {
     return () => unsubscribe();
   }, [auth, router]);
 
-  useEffect(() => {
-    const fetchMembers = async () => {
-      const snapshot = await getDocs(collection(db, 'uyeler'));
-      const data = snapshot.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter((doc: any) => doc.isMember !== false); // sadece ofis üyeleri
-      setMembers(data as any);
-    };
-    fetchMembers();
-  }, []);
+useEffect(() => {
+  const fetchMembers = async () => {
+    if (!companyID) return;
+
+    const q = query(collection(db, 'users'), where('companyID', '==', companyID));
+    const snapshot = await getDocs(q);
+
+    const data = snapshot.docs
+      .map((doc) => {
+        const userData = doc.data();
+        const name = userData.name?.trim();
+        const email = userData.email;
+
+        // Adı boş olanları veya admin@ai.com gibi özel kullanıcıyı dışla
+        if (!name || name === '' || email === 'admin@ai.com') return null;
+
+        return { id: doc.id, ...userData };
+      })
+      .filter(Boolean);
+
+    setMembers(data as any);
+  };
+
+  fetchMembers();
+}, [companyID]);
 
 
   const togglePresence = async (id: string, current: boolean) => {
-    const ref = doc(db, 'uyeler', id);
+    const ref = doc(db, 'users', id);
     await updateDoc(ref, { isPresent: !current });
     setMembers((prev) =>
       prev.map((m) => (m.id === id ? { ...m, isPresent: !current } : m))
@@ -68,7 +88,7 @@ export default function AdminDashboard() {
   };
 
   const toggleAdmin = async (id: string, currentRole: string) => {
-    const ref = doc(db, 'uyeler', id);
+    const ref = doc(db, 'users', id);
     const newRole = currentRole === 'admin' ? 'member' : 'admin';
     await updateDoc(ref, { role: newRole });
     setMembers((prev) =>

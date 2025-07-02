@@ -12,8 +12,8 @@ import {
   doc,
   updateDoc,
 } from "firebase/firestore";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { approveTaskAndAssignToUser } from '../components/utils/approveTaskAndAssign';
-
 
 type MealTask = {
   id: string;
@@ -21,6 +21,7 @@ type MealTask = {
   tarih: any;
   durum: string;
   yer?: string;
+  email?: string;
 };
 
 type MealPlace = {
@@ -40,39 +41,52 @@ export default function MealTasks() {
   const [ignoreGenderRule, setIgnoreGenderRule] = useState(false);
   const [places, setPlaces] = useState<MealPlace[]>([]);
   const [newPlace, setNewPlace] = useState("");
+  const [companyID, setCompanyID] = useState<string | null>(null);
+
+  const todayStr = new Date().toDateString();
 
   useEffect(() => {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) return;
+
+      const q = query(collection(db, "users"), where("email", "==", user.email));
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        const userData = snapshot.docs[0].data();
+        setCompanyID(userData.companyID);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!companyID) return;
+
     const fetchData = async () => {
       const snapshot = await getDocs(
-        query(collection(db, "uyeler"), where("isPresent", "==", true))
+        query(collection(db, "users"), where("companyID", "==", companyID), where("isPresent", "==", true))
       );
       const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as any[];
-      setMembers(
-        data
-          .filter((d) => d.name !== "admin@ai.com")
-          .map((d) => ({
-            id: d.id,
-            name: d.name,
-            email: d.email, // ensure email is included if present
-          }))
-      );
+      setMembers(data.map((d) => ({ id: d.id, name: d.name, email: d.email })));
     };
 
     const fetchPlaces = async () => {
-      const snapshot = await getDocs(collection(db, "yemekYerleri"));
+      const snapshot = await getDocs(query(collection(db, "yemekYerleri"), where("companyID", "==", companyID)));
       const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as MealPlace[];
       setPlaces(data);
     };
 
     fetchData();
     fetchPlaces();
-  }, []);
+  }, [companyID]);
 
   const assignMealTasks = async () => {
+    if (!companyID) return;
     setLoading(true);
-    const todayStr = new Date().toDateString();
 
-    const snapshot = await getDocs(collection(db, "yemekGorevleri"));
+    const snapshot = await getDocs(query(collection(db, "yemekGorevleri"), where("companyID", "==", companyID)));
     const allTasks = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as MealTask[];
     setTasks(allTasks);
 
@@ -91,7 +105,7 @@ export default function MealTasks() {
     }
 
     const shuffled = [...availableMembers].sort(() => 0.5 - Math.random());
-    const selected: { id: string; name: string }[] = [];
+    const selected: { id: string; name: string; email?: string }[] = [];
 
     for (let i = 0; i < shuffled.length && selected.length < assignCount; i++) {
       const candidate = shuffled[i];
@@ -114,6 +128,8 @@ export default function MealTasks() {
         tarih: Timestamp.now(),
         durum: "beklemede",
         yer: selectedPlaces[i]?.name || "-",
+        email: selected[i]?.email,
+        companyID,
       };
       const docRef = await addDoc(collection(db, "yemekGorevleri"), newTask);
       newTasks.push({ ...newTask, id: docRef.id });
@@ -134,8 +150,8 @@ export default function MealTasks() {
 
     await approveTaskAndAssignToUser({
       ...task,
-      assignedEmail: members.find(m => m.name === task.atanan)?.email,
-      id: task.id
+      assignedEmail: members.find((m) => m.name === task.atanan)?.email,
+      id: task.id,
     });
   };
 
@@ -151,10 +167,10 @@ export default function MealTasks() {
   };
 
   const addPlace = async () => {
-    if (!newPlace.trim()) return;
-    await addDoc(collection(db, "yemekYerleri"), { name: newPlace.trim() });
+    if (!newPlace.trim() || !companyID) return;
+    await addDoc(collection(db, "yemekYerleri"), { name: newPlace.trim(), companyID });
     setNewPlace("");
-    const snapshot = await getDocs(collection(db, "yemekYerleri"));
+    const snapshot = await getDocs(query(collection(db, "yemekYerleri"), where("companyID", "==", companyID)));
     const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as MealPlace[];
     setPlaces(data);
   };
@@ -175,54 +191,48 @@ export default function MealTasks() {
             disabled={loading}
             className="bg-gray-200 hover:bg-gray-100 text-black text-sm px-4 py-2 rounded"
           >
-            {loading ? "Atanıyor..." : "Görev Ata"}
+            Görev Ata
           </button>
         </div>
       </div>
 
-      <div className="mb-4 flex flex-col gap-2 text-sm">
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={allowDuplicateToday}
-            onChange={() => setAllowDuplicateToday(!allowDuplicateToday)}
-          />
-          Aynı kişiye birden fazla görev atanmasına izin ver
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={ignoreGenderRule}
-            onChange={() => setIgnoreGenderRule(!ignoreGenderRule)}
-          />
-          Cinsiyet uyum kuralını devre dışı bırak
-        </label>
-      </div>
-
-      <div className="mb-4 flex gap-2">
+      <div className="flex gap-2 mb-4">
         <input
           type="text"
           value={newPlace}
           onChange={(e) => setNewPlace(e.target.value)}
           placeholder="örn. çorba hazırlığı"
-          className="border px-3 py-1 rounded w-full"
+          className="border px-3 py-2 rounded w-full"
         />
         <button
           onClick={addPlace}
-          className="bg-gray-300 hover:bg-gray-200 text-black px-3 py-1 rounded"
+          className="bg-gray-300 hover:bg-gray-200 text-black px-4 py-2 rounded"
         >
           Ekle
         </button>
+        <button
+          onClick={() => setTasks([])}
+          className="bg-red-300 hover:bg-red-400 text-black px-4 py-2 rounded"
+        >
+          Geçmişi<br />Temizle
+        </button>
       </div>
 
-      {loading ? (
-        <p className="text-sm text-gray-500">Görevler atanıyor...</p>
-      ) : !tasksAssigned ? (
+      <label className="flex items-center text-sm gap-2 mb-4">
+        <input
+          type="checkbox"
+          checked={allowDuplicateToday}
+          onChange={() => setAllowDuplicateToday(!allowDuplicateToday)}
+        />
+        Aynı kişiye birden fazla görev atanmasına izin ver
+      </label>
+
+      {!tasksAssigned ? (
         <p className="text-sm text-gray-500">Henüz görev ataması yapılmadı.</p>
       ) : (
         <div className="space-y-4">
           {tasks
-            .filter((task) => new Date(task.tarih?.seconds * 1000).toDateString() === new Date().toDateString())
+            .filter((task) => new Date(task.tarih?.seconds * 1000).toDateString() === todayStr)
             .map((task, index) => (
               <div
                 key={index}
@@ -237,12 +247,13 @@ export default function MealTasks() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span
-                    className={`text-xs px-2 py-1 rounded-full font-medium ${task.durum === "tamamlandı"
-                      ? "bg-green-100 text-green-800"
-                      : task.durum === "onaylandı"
+                    className={`text-xs px-2 py-1 rounded-full font-medium ${
+                      task.durum === "tamamlandı"
+                        ? "bg-green-100 text-green-800"
+                        : task.durum === "onaylandı"
                         ? "bg-blue-100 text-blue-800"
                         : "bg-gray-100 text-gray-800"
-                      }`}
+                    }`}
                   >
                     {task.durum}
                   </span>

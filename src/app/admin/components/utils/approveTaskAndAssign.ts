@@ -5,9 +5,9 @@ import {
     query,
     where,
     collection,
+    serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
-
 
 /**
  * Görevi onaylayıp ilgili kullanıcının alt koleksiyonuna yazan fonksiyon.
@@ -15,14 +15,12 @@ import { db } from '../../../lib/firebase';
  */
 export async function approveTaskAndAssignToUser(task: any) {
     try {
-        // 1. Email adresi görev objesinde atanmış mı kontrol et
         const userEmail = task.assignedEmail || task.email;
         if (!userEmail) {
             console.error("Görev objesinde 'assignedEmail' veya 'email' alanı eksik.");
             return;
         }
 
-        // 2. UID'yi Firestore'dan email'e göre bul
         const q = query(collection(db, 'uyeler'), where('email', '==', userEmail));
         const snapshot = await getDocs(q);
 
@@ -33,11 +31,10 @@ export async function approveTaskAndAssignToUser(task: any) {
 
         const uid = snapshot.docs[0].id;
 
-        // 3. Kullanıcının alt koleksiyonuna görevi yaz
         await setDoc(doc(db, `users/${uid}/tasks`, task.id), {
             ...task,
-            durum: 'onaylandı',              // 🟢 Görev görünmesi için şart
-            assignedAt: new Date(),          // 🕓 Zaman damgası
+            durum: 'onaylandı',
+            assignedAt: serverTimestamp(),
         });
 
         console.log(`✅ Görev başarıyla atandı: ${userEmail} → ${task.id}`);
