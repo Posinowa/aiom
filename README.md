@@ -1,40 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/pages/api-reference/create-next-app).
+## AI Office Manager - Kullanım Senaryosu
 
-## Getting Started
+### 1. Uygulamanın Amacı ve Genel Tanımı
 
-First, run the development server:
+**AI Office Manager**, ofis içi düzeni sağlamak, görev dağılımını optimize etmek ve personel takibini otomatikleştirmek amacıyla geliştirilmiş yapay zekâ destekli bir web uygulamasıdır. Sistem; çalışanların giriş-çıkış saatlerini yüz tanıma ile kayıt altına alır, ofiste kimlerin olduğunu anlık olarak gösterir ve temizlik-yemek görevlerini adil bir şekilde dağıtır.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+---
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Rol Tabanlı Yapı: Admin ve Member
 
-You can start editing the page by modifying `pages/index.tsx`. The page auto-updates as you edit the file.
+**Admin:**
 
-[API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.ts`.
+* Tüm çalışanların giriş-çıkış bilgilerini ve görev geçmişini görebilir.
+* Görev dağılımlarını manuel olarak düzenleyebilir veya sistemin otomatik dağıtımını kullanabilir.
+* Diğer çalışanlara **yetki vererek** onların da yönetim işlemlerini yapmasına olanak tanır.
+* Şirket çalışan listesine erişebilir ve yeni çalışan ekleyebilir.
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) instead of React pages.
+**Member:**
 
-This project uses [`next/font`](https://nextjs.org/docs/pages/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+* Sadece kendi görevlerini ve giriş-çıkış bilgilerini görüntüleyebilir.
+* O gün ofiste kimlerin olduğunu görebilir.
+* Temizlik ve yemek görevleri kendisine atandığında, sistemden bildirim alır.
+* Yalnızca kendine özel kullanıcı paneline erişebilir.
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+### 3. Giriş - Çıkış Takibi (Yüz Tanıma ile)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn-pages-router) - an interactive Next.js tutorial.
+Sabah ofise gelen bir çalışan, giriş noktasındaki güvenlik kamerası ya da görüntü aktaran cihaz tarafından otomatik olarak tanınır.
+Yüz tanıma sistemi, kullanıcının:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+* Adını ve soyadını,
+* Hangi gün, saat kaçta giriş yaptığını,
+* Hangi cihaz tarafından tanındığını
 
-## Deploy on Vercel
+otomatik olarak kaydeder. Aynı işlem çıkış sırasında da gerçekleştirilir.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Bu veriler yöneticinin paneline gerçek zamanlı olarak iletilir. Böylece çalışanların günlük ofis süreci kolayca izlenebilir ve raporlanabilir.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
+---
+
+### 4. Görev Dağıtımı (Yemek ve Temizlik)
+
+Uygulama, AI algoritmalarıyla çalışanlar arasında **dönüşümlü ve adaletli** bir görev planlaması yapar:
+
+* Daha önce görev alan bir kişi, sistem tarafından bir sonraki dağıtıma dahil edilmez.
+* Görevler günlük olarak belirlenir.
+* Admin isterse görevleri manuel olarak da düzenleyebilir.
+* Yetkilendirilmiş member’lar da bu görev dağılımı işlemini yapabilir.
+
+Bu özellik, hem sorumluluk paylaşımını sağlar hem de görevlerde adaleti korur.
+
+---
+
+### 5. Ofiste Kim Var?
+
+Tüm kullanıcılar, uygulamadaki **"Ofiste Kimler Var?"** panelinden, o an ofiste bulunan kişileri anlık olarak görebilir. Bu özellik:
+
+* Takım koordinasyonunu kolaylaştırır,
+* Toplantı planlamalarını hızlandırır,
+* Gereksiz iletişim trafiğini azaltır.
+
+---
+
+### 6. Sonuç
+
+AI Office Manager, klasik ofis yönetimini modern, yapay zekâ destekli bir sisteme dönüştürerek hem yöneticilerin iş yükünü azaltır hem de çalışanlar arasında eşit sorumluluk bilinci oluşturur.
+**Yüz tanıma entegrasyonu**, **rol bazlı yetkilendirme**, **otomatik görev dağılımı** ve **gerçek zamanlı ofis durumu** gibi özelliklerle donatılmış bu sistem, yeni nesil ofislerin dijital çözümüdür.
+
+ 
