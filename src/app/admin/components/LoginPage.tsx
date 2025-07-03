@@ -2,12 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { sendEmailVerification } from 'firebase/auth';
+import toast from 'react-hot-toast';
+
 import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
   sendPasswordResetEmail,
-  User,
 } from 'firebase/auth';
 import { auth, db } from '../../lib/firebase';
 import {
@@ -34,20 +36,20 @@ export default function LoginPage() {
       const snapshot = await getDocs(q);
 
       if (snapshot.empty) {
-        alert('Sistemde kayıtlı kullanıcı bulunamadı.');
+        toast.error('Sistemde kayıtlı kullanıcı bulunamadı.');
         return;
       }
 
       const userData = snapshot.docs[0].data();
       const role = userData.role || 'member';
 
-  if (role === 'member' && !user.emailVerified) {
-  await sendEmailVerification(user);
-  alert('E-posta adresinizi henüz doğrulamadınız. Yeni bir doğrulama bağlantısı gönderildi.');
-  await auth.signOut();
-  return;
-}
-
+      // ✅ Sadece member için e-posta doğrulama şartı
+      if (role !== 'admin' && role !== 'superadmin' && !user.emailVerified) {
+        await sendEmailVerification(user);
+        toast.error('E-posta adresiniz doğrulanmamış. Yeni bir doğrulama e-postası gönderildi.');
+        await auth.signOut();
+        return;
+      }
 
       await setDoc(doc(db, 'userLogs', `${user.uid}_${Date.now()}`), {
         uid: user.uid,
@@ -61,9 +63,8 @@ export default function LoginPage() {
       document.cookie = `companyID=${userData.companyID}; path=/`;
 
       router.push('/member');
-
-    } catch (err) {
-      alert('Giriş başarısız: ' + (err as Error).message);
+    } catch (err: any) {
+      toast.error('Giriş başarısız: ' + err.message);
     }
   };
 
@@ -77,7 +78,7 @@ export default function LoginPage() {
       const snapshot = await getDocs(q);
 
       if (snapshot.empty) {
-        alert('Sistemde kayıtlı kullanıcı bulunamadı.');
+        toast.error('Sistemde kayıtlı kullanıcı bulunamadı.');
         return;
       }
 
@@ -96,19 +97,18 @@ export default function LoginPage() {
       document.cookie = `companyID=${userData.companyID}; path=/`;
 
       router.push('/member');
-
-    } catch (err) {
-      alert('Google ile giriş başarısız: ' + (err as Error).message);
+    } catch (err: any) {
+      toast.error('Google ile giriş başarısız: ' + err.message);
     }
   };
 
   const handleResetPassword = async () => {
-    if (!email) return alert('Lütfen e-posta adresinizi girin.');
+    if (!email) return toast.error('Lütfen e-posta adresinizi girin.');
     try {
       await sendPasswordResetEmail(auth, email);
-      alert('Parola sıfırlama bağlantısı e-posta adresinize gönderildi.');
+      toast.success('Parola sıfırlama bağlantısı e-posta adresinize gönderildi.');
     } catch (err: any) {
-      alert('Hata: ' + err.message);
+      toast.error('Hata: ' + err.message);
     }
   };
 
@@ -168,7 +168,3 @@ export default function LoginPage() {
     </div>
   );
 }
-function sendEmailVerification(user: User) {
-  throw new Error('Function not implemented.');
-}
-

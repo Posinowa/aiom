@@ -24,26 +24,33 @@ export default function Dashboard() {
 
   const auth = getAuth();
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        router.push('/');
-      } else {
-        setUserEmail(user.email);
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+      router.push('/');
+    } else {
+      setUserEmail(user.email);
 
-        const q = query(collection(db, 'users'), where('email', '==', user.email));
-        const snapshot = await getDocs(q);
+      const q = query(collection(db, 'users'), where('email', '==', user.email));
+      const snapshot = await getDocs(q);
 
-        if (!snapshot.empty) {
-          const userData = snapshot.docs[0].data();
-          setIsAdmin(userData.role === 'admin');
-          setCompanyID(userData.companyID);
+      if (!snapshot.empty) {
+        const userData = snapshot.docs[0].data();
+
+        if (userData.role === 'superAdmin') {
+          router.push('/superadmin');
+          return; // superAdmin ise başka bir şeye bakma
         }
-      }
-    });
 
-    return () => unsubscribe();
-  }, [auth, router]);
+        setIsAdmin(userData.role === 'admin');
+        setCompanyID(userData.companyID);
+      }
+    }
+  });
+
+  return () => unsubscribe();
+}, [auth, router]);
+
 
   useEffect(() => {
     if (!companyID) return;
