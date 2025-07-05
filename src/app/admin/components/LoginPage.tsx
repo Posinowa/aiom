@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { sendEmailVerification } from 'firebase/auth';
-import toast from 'react-hot-toast';
+import toast from 'react-hot-toast'; // TOAST BURADA
 
 import {
   signInWithEmailAndPassword,
@@ -43,8 +43,7 @@ export default function LoginPage() {
       const userData = snapshot.docs[0].data();
       const role = userData.role || 'member';
 
-      // ✅ Sadece member için e-posta doğrulama şartı
-      if (role !== 'admin' && role !== 'superadmin' && !user.emailVerified) {
+      if (role === 'member' && !user.emailVerified) {
         await sendEmailVerification(user);
         toast.error('E-posta adresiniz doğrulanmamış. Yeni bir doğrulama e-postası gönderildi.');
         await auth.signOut();
@@ -63,8 +62,8 @@ export default function LoginPage() {
       document.cookie = `companyID=${userData.companyID}; path=/`;
 
       router.push('/member');
-    } catch (err: any) {
-      toast.error('Giriş başarısız: ' + err.message);
+    } catch (err) {
+      toast.error('Giriş başarısız: ' + (err as Error).message);
     }
   };
 
@@ -97,8 +96,8 @@ export default function LoginPage() {
       document.cookie = `companyID=${userData.companyID}; path=/`;
 
       router.push('/member');
-    } catch (err: any) {
-      toast.error('Google ile giriş başarısız: ' + err.message);
+    } catch (err) {
+      toast.error('Google ile giriş başarısız: ' + (err as Error).message);
     }
   };
 

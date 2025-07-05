@@ -1,7 +1,8 @@
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import serviceAccountJson from '../../serviceAccountKey.json' assert { type: 'json' };
 import { ServiceAccount } from 'firebase-admin';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const serviceAccountJson = require('../../serviceAccountKey.json');
 const serviceAccount = serviceAccountJson as ServiceAccount;
 
 initializeApp({
