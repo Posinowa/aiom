@@ -24,32 +24,32 @@ export default function Dashboard() {
 
   const auth = getAuth();
 
-useEffect(() => {
-  const unsubscribe = onAuthStateChanged(auth, async (user) => {
-    if (!user) {
-      router.push('/');
-    } else {
-      setUserEmail(user.email);
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        router.push('/');
+      } else {
+        setUserEmail(user.email);
 
-      const q = query(collection(db, 'users'), where('email', '==', user.email));
-      const snapshot = await getDocs(q);
+        const q = query(collection(db, 'users'), where('email', '==', user.email));
+        const snapshot = await getDocs(q);
 
-      if (!snapshot.empty) {
-        const userData = snapshot.docs[0].data();
+        if (!snapshot.empty) {
+          const userData = snapshot.docs[0].data();
 
-        if (userData.role === 'superAdmin') {
-          router.push('/superadmin');
-          return; // superAdmin ise başka bir şeye bakma
+          if (userData.role === 'superAdmin') {
+            router.push('/superadmin');
+            return; // superAdmin ise başka bir şeye bakma
+          }
+
+          setIsAdmin(userData.role === 'admin');
+          setCompanyID(userData.companyID);
         }
-
-        setIsAdmin(userData.role === 'admin');
-        setCompanyID(userData.companyID);
       }
-    }
-  });
+    });
 
-  return () => unsubscribe();
-}, [auth, router]);
+    return () => unsubscribe();
+  }, [auth, router]);
 
 
   useEffect(() => {
@@ -60,7 +60,9 @@ useEffect(() => {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter((doc: any) => doc.name?.trim() !== "");
+        .filter((doc: any) =>
+          doc.name?.trim() !== "" && doc.email !== "admin@ai.com"
+        );
 
       setMembers(data as any);
     });
@@ -111,11 +113,10 @@ useEffect(() => {
                 >
                   <span>{member.name}</span>
                   <span
-                    className={`px-3 py-1 rounded-full ${
-                      member.isPresent
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
+                    className={`px-3 py-1 rounded-full ${member.isPresent
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-gray-100 text-gray-800'
+                      }`}
                   >
                     {member.isPresent ? 'Ofiste' : 'Dışarıda'}
                   </span>
