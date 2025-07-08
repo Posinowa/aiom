@@ -15,29 +15,32 @@ import { db } from '../../../lib/firebase';
  */
 export async function approveTaskAndAssignToUser(task: any) {
     try {
-        const userEmail = task.assignedEmail || task.email;
+        const userEmail = (task.assignedEmail || task.email)?.trim().toLowerCase();
         if (!userEmail) {
-            console.error("Görev objesinde 'assignedEmail' veya 'email' alanı eksik.");
+            console.error("❌ Görev objesinde 'assignedEmail' veya 'email' alanı eksik.");
             return;
         }
 
-        const q = query(collection(db, 'uyeler'), where('email', '==', userEmail));
+        console.log("📧 Aranan e-posta:", userEmail);
+
+        const q = query(collection(db, 'users'), where('email', '==', userEmail));
         const snapshot = await getDocs(q);
 
         if (snapshot.empty) {
-            console.error("Eşleşen kullanıcı bulunamadı:", userEmail);
+            console.error("❌ Eşleşen kullanıcı bulunamadı:", userEmail);
             return;
         }
 
         const uid = snapshot.docs[0].id;
+        const taskId = task.id || crypto.randomUUID(); // Eğer task.id yoksa rastgele oluştur
 
-        await setDoc(doc(db, `users/${uid}/tasks`, task.id), {
+        await setDoc(doc(db, `users/${uid}/tasks`, taskId), {
             ...task,
             durum: 'onaylandı',
             assignedAt: serverTimestamp(),
         });
 
-        console.log(`✅ Görev başarıyla atandı: ${userEmail} → ${task.id}`);
+        console.log(`✅ Görev başarıyla atandı: ${userEmail} → ${taskId}`);
     } catch (err) {
         console.error("❌ Görev onaylama hatası:", err);
     }

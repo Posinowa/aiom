@@ -9,6 +9,11 @@ export const metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="tr">
+      <head>
+        <title>AI Office Manager</title>
+        <meta name="description" content="Ofis görevlerini yönetin" />
+        <link rel="icon" href="/favicon.ico" type="image/png" />
+      </head>
       <body className="min-h-screen bg-gray-100 text-black antialiased">
         {children}
 

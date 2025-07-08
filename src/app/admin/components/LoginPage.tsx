@@ -32,7 +32,7 @@ export default function LoginPage() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      const q = query(collection(db, 'users'), where('email', '==', user.email));
+      const q = query(collection(db, 'users'), where('email', '==', user.email?.toLowerCase().trim()));
       const snapshot = await getDocs(q);
 
       if (snapshot.empty) {
@@ -73,7 +73,7 @@ export default function LoginPage() {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      const q = query(collection(db, 'users'), where('email', '==', user.email));
+      const q = query(collection(db, 'users'), where('email', '==', user.email?.toLowerCase().trim()));
       const snapshot = await getDocs(q);
 
       if (snapshot.empty) {

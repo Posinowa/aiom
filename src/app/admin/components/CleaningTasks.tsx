@@ -245,13 +245,12 @@ export default function CleaningTasks() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span
-                    className={`text-xs px-2 py-1 rounded-full font-medium ${
-                      task.durum === 'tamamlandı'
+                    className={`text-xs px-2 py-1 rounded-full font-medium ${task.durum === 'tamamlandı'
                         ? 'bg-green-100 text-green-800'
                         : task.durum === 'onaylandı'
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}
                   >
                     {task.durum}
                   </span>
