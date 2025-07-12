@@ -9,7 +9,8 @@ import {
     updateDoc,
     doc,
     addDoc,
-    onSnapshot,
+    query,
+    where,
 } from 'firebase/firestore';
 
 interface Task {
@@ -18,17 +19,27 @@ interface Task {
     tarih: any;
     durum: string;
     yer: string;
+    tip: 'yemek' | 'temizlik';
 }
 
 export default function MyTasks() {
     const [tasks, setTasks] = useState<Task[]>([]);
-    const [userUid, setUserUid] = useState<string | null>(null);
+    const [userInfo, setUserInfo] = useState<{ uid: string; name: string; companyID: string } | null>(null);
     const auth = getAuth();
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
-                setUserUid(user.uid);
+                const uid = user.uid;
+                const userSnap = await getDocs(query(collection(db, 'users'), where('email', '==', user.email)));
+                if (!userSnap.empty) {
+                    const userData = userSnap.docs[0].data();
+                    setUserInfo({
+                        uid,
+                        name: userData.name,
+                        companyID: userData.companyID,
+                    });
+                }
             }
         });
 
@@ -36,39 +47,56 @@ export default function MyTasks() {
     }, []);
 
     useEffect(() => {
-        if (!userUid) return;
+        if (!userInfo) return;
 
-        const unsubscribeTasks = onSnapshot(
-            collection(db, `users/${userUid}/tasks`),
-            (snapshot) => {
-                const data = snapshot.docs.map((doc) => ({
-                    id: doc.id,
-                    ...doc.data(),
-                })) as Task[];
-                setTasks(data);
-            }
-        );
+        const fetchTasks = async () => {
+            const { companyID, name } = userInfo;
 
-        return () => unsubscribeTasks();
-    }, [userUid]);
+            const temizlikRef = collection(db, `tasks/${companyID}/temizlikGorevListesi`);
+            const yemekRef = collection(db, `tasks/${companyID}/yemekGorevListesi`);
+
+            const temizlikSnap = await getDocs(query(temizlikRef, where('atanan', '==', name)));
+            const yemekSnap = await getDocs(query(yemekRef, where('atanan', '==', name)));
+
+            const temizlikTasks = temizlikSnap.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data(),
+                tip: 'temizlik',
+            })) as Task[];
+
+            const yemekTasks = yemekSnap.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data(),
+                tip: 'yemek',
+            })) as Task[];
+
+            setTasks([...temizlikTasks, ...yemekTasks]);
+        };
+
+        fetchTasks();
+    }, [userInfo]);
 
     const markAsDone = async (task: Task) => {
-  if (!userUid) return;
+        if (!userInfo) return;
 
-  const taskRef = doc(db, `users/${userUid}/tasks`, task.id);
-  await updateDoc(taskRef, { durum: 'tamamlandı' });
+        const ref = doc(db, `tasks/${userInfo.companyID}/${task.tip === 'yemek' ? 'yemekGorevListesi' : 'temizlikGorevListesi'}/${task.id}`);
+        await updateDoc(ref, { durum: 'tamamlandı' });
 
-  await addDoc(collection(db, `users/${userUid}/logs`), {
-    atanan: task.atanan,
-    tarih: task.tarih,
-    gorev: 'temizlik', // veya dışarıdan gelen props ile dinamikleştirilebilir
-  });
+        await addDoc(collection(db, 'gorevGecmisi'), {
+            atanan: task.atanan,
+            tarih: task.tarih,
+            gorev: task.tip,
+        });
 
-  setTasks((prev) =>
-    prev.map((t) => (t.id === task.id ? { ...t, durum: 'tamamlandı' } : t))
-  );
-};
+        setTasks((prev) =>
+            prev.map((t) => (t.id === task.id ? { ...t, durum: 'tamamlandı' } : t))
+        );
+    };
 
+    const groupedTasks = {
+        yemek: tasks.filter((t) => t.tip === 'yemek'),
+        temizlik: tasks.filter((t) => t.tip === 'temizlik'),
+    };
 
     return (
         <div className="p-4">
@@ -79,54 +107,63 @@ export default function MyTasks() {
                     Şu anda atanan bir göreviniz yok.
                 </p>
             ) : (
-                <div className="space-y-4">
-                    {tasks.map((task) => {
-                        const timestamp = task.tarih?.seconds
-                            ? new Date(task.tarih.seconds * 1000)
-                            : null;
+                <div className="space-y-8">
+                    {(['yemek', 'temizlik'] as const).map((tip) => (
+                        groupedTasks[tip].length > 0 && (
+                            <div key={tip}>
+                                <h3 className="text-xl font-semibold mb-2 text-gray-800 border-b pb-1">
+                                    {tip === 'yemek' ? '🍽️ Yemek Görevleri' : '🧼 Temizlik Görevleri'}
+                                </h3>
+                                <div className="space-y-4">
+                                    {groupedTasks[tip].map((task) => {
+                                        const timestamp = task.tarih?.seconds
+                                            ? new Date(task.tarih.seconds * 1000)
+                                            : null;
 
-                        const formattedDate = timestamp
-                            ? timestamp.toLocaleDateString('en-US', {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                            })
-                            : 'Tarih yok';
+                                        const formattedDate = timestamp
+                                            ? timestamp.toLocaleDateString('tr-TR', {
+                                                year: 'numeric',
+                                                month: 'short',
+                                                day: 'numeric',
+                                            })
+                                            : 'Tarih yok';
 
-                        const durumRengi =
-                            task.durum === 'tamamlandı'
-                                ? 'bg-green-100 text-green-800'
-                                : task.durum === 'onaylandı'
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : 'bg-orange-100 text-orange-800';
+                                        const durumRengi =
+                                            task.durum === 'tamamlandı'
+                                                ? 'bg-green-100 text-green-800'
+                                                : task.durum === 'onaylandı'
+                                                    ? 'bg-blue-100 text-blue-800'
+                                                    : 'bg-orange-100 text-orange-800';
 
-                        return (
-                            <div
-                                key={task.id}
-                                className="bg-white rounded-xl shadow p-5 flex justify-between items-center"
-                            >
-                                <div className="text-lg font-semibold text-black">
-                                    {task.yer || 'Bilinmeyen Görev'}
-                                </div>
-                                <div className="text-right space-y-1">
-                                    <div
-                                        className={`text-xs inline-block px-3 py-1 rounded-full font-medium ${durumRengi}`}
-                                    >
-                                        {task.durum}
-                                    </div>
-                                    <div className="text-sm text-gray-500">{formattedDate}</div>
-                                    {task.durum === 'onaylandı' && (
-                                        <button
-                                            onClick={() => markAsDone(task)}
-                                            className="mt-1 text-xs bg-green-600 text-white px-3 py-1 rounded"
-                                        >
-                                            Tamamla
-                                        </button>
-                                    )}
+                                        return (
+                                            <div
+                                                key={task.id}
+                                                className="bg-white rounded-xl shadow p-5 flex justify-between items-center border"
+                                            >
+                                                <div className="flex items-center space-x-2">
+                                                    <div
+                                                        className={`text-xs inline-block px-3 py-1 rounded-full font-medium ${durumRengi}`}
+                                                    >
+                                                        {task.durum}
+                                                    </div>
+                                                    <div className="text-sm text-gray-500">{formattedDate}</div>
+                                                    {task.durum === 'onaylandı' && (
+                                                        <button
+                                                            onClick={() => markAsDone(task)}
+                                                            className="text-xs bg-green-600 text-white px-3 py-1 rounded"
+                                                        >
+                                                            Tamamla
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
-                        );
-                    })}
+                        )
+                    ))}
                 </div>
             )}
         </div>

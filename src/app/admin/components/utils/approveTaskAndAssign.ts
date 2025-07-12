@@ -1,46 +1,44 @@
 import {
     doc,
-    setDoc,
-    getDocs,
-    query,
-    where,
-    collection,
+    updateDoc,
     serverTimestamp,
+    addDoc,
+    collection,
 } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 
 /**
- * Görevi onaylayıp ilgili kullanıcının alt koleksiyonuna yazan fonksiyon.
- * @param task Görev objesi – içinde atanan kişinin adı veya e-posta bilgisi olmalı
+ * Görevi onaylayıp ilgili görev belgesini günceller.
+ * @param task Görev objesi (id, companyID, tip, vb. içermeli)
  */
 export async function approveTaskAndAssignToUser(task: any) {
     try {
-        const userEmail = (task.assignedEmail || task.email)?.trim().toLowerCase();
-        if (!userEmail) {
-            console.error("❌ Görev objesinde 'assignedEmail' veya 'email' alanı eksik.");
+        const { companyID, id, tip = 'temizlik' } = task;
+
+        if (!companyID || !id) {
+            console.error('❌ Görev onaylanamadı: Eksik companyID veya id');
             return;
         }
 
-        console.log("📧 Aranan e-posta:", userEmail);
+        // Görev tipi (temizlik / yemek) göre path belirle
+        const koleksiyonAdi = tip === 'yemek' ? 'yemekGorevListesi' : 'temizlikGorevListesi';
 
-        const q = query(collection(db, 'users'), where('email', '==', userEmail));
-        const snapshot = await getDocs(q);
-
-        if (snapshot.empty) {
-            console.error("❌ Eşleşen kullanıcı bulunamadı:", userEmail);
-            return;
-        }
-
-        const uid = snapshot.docs[0].id;
-        const taskId = task.id || crypto.randomUUID(); // Eğer task.id yoksa rastgele oluştur
-
-        await setDoc(doc(db, `users/${uid}/tasks`, taskId), {
-            ...task,
+        // Firestore görev belgesini güncelle
+        const taskRef = doc(db, `tasks/${companyID}/${koleksiyonAdi}`, id);
+        await updateDoc(taskRef, {
             durum: 'onaylandı',
             assignedAt: serverTimestamp(),
         });
 
-        console.log(`✅ Görev başarıyla atandı: ${userEmail} → ${taskId}`);
+        console.log(`✅ Görev "${id}" onaylandı → ${koleksiyonAdi}`);
+
+        // İstersen burada log kaydı da ekleyebilirsin:
+        // await addDoc(collection(db, 'gorevGecmisi'), {
+        //   atanan: task.atanan,
+        //   tarih: task.tarih,
+        //   gorev: tip,
+        // });
+
     } catch (err) {
         console.error("❌ Görev onaylama hatası:", err);
     }

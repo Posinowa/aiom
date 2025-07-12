@@ -37,9 +37,9 @@ export default function CleaningTasks() {
   const [newPlace, setNewPlace] = useState('');
   const [assignCount, setAssignCount] = useState<number>(2);
   const [loading, setLoading] = useState(false);
-  const [tasksAssigned, setTasksAssigned] = useState(false);
   const [allowDuplicateToday, setAllowDuplicateToday] = useState(false);
   const [companyID, setCompanyID] = useState<string | null>(null);
+  const [lastAssignedDate, setLastAssignedDate] = useState<string | null>(null); // 🔧 eklendi
 
   const todayStr = new Date().toDateString();
   const auth = getAuth();
@@ -47,7 +47,6 @@ export default function CleaningTasks() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) return;
-
       const q = query(collection(db, 'users'), where('email', '==', user.email));
       const snapshot = await getDocs(q);
       if (!snapshot.empty) {
@@ -55,7 +54,6 @@ export default function CleaningTasks() {
         setCompanyID(userData.companyID);
       }
     });
-
     return () => unsubscribe();
   }, []);
 
@@ -66,7 +64,13 @@ export default function CleaningTasks() {
       const q = query(collection(db, 'users'), where('companyID', '==', companyID), where('isPresent', '==', true));
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as any[];
-      setMembers(data.map((m) => ({ id: m.id, name: m.name, email: m.email })));
+      const excludedEmails = ['admin@ai.com'];
+
+      setMembers(
+        data
+          .filter((m) => !excludedEmails.includes(m.email) && !!m.name)
+          .map((m) => ({ id: m.id, name: m.name, email: m.email }))
+      );
     };
 
     const fetchPlaces = async () => {
@@ -77,7 +81,7 @@ export default function CleaningTasks() {
     };
 
     const fetchTasks = async () => {
-      const q = query(collection(db, 'temizlikGorevleri'), where('companyID', '==', companyID));
+      const q = collection(db, `tasks/${companyID}/temizlikGorevListesi`);
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as CleaningTask[];
       setTasks(data);
@@ -87,39 +91,41 @@ export default function CleaningTasks() {
     fetchPlaces();
     fetchTasks();
   }, [companyID]);
+  const [usedUsernames, setUsedUsernames] = useState<string[]>([]); // ✅ herkes sırayla gelsin
 
   const assignCleaningTasks = async () => {
     if (!companyID) return;
     setLoading(true);
 
-    const snapshot = await getDocs(query(collection(db, 'temizlikGorevleri'), where('companyID', '==', companyID)));
+    // Mevcut görevleri Firestore'dan çek
+    const snapshot = await getDocs(collection(db, `tasks/${companyID}/temizlikGorevListesi`));
     const allTasks = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as CleaningTask[];
-    const assignedToday = allTasks
-      .filter((t) => new Date(t.tarih?.seconds * 1000).toDateString() === todayStr)
-      .map((t) => t.atanan);
 
-    const availableMembers = allowDuplicateToday
-      ? members
-      : members.filter((m) => !assignedToday.includes(m.name));
+    // Uygun olan üyeleri filtrele
+    const availableMembers = members.filter((m) => !usedUsernames.includes(m.name));
 
+    let finalMembers: typeof members;
+
+    // Eğer elimizde yeterli sayıda üye kalmadıysa sıfırla ve baştan başla
     if (availableMembers.length < assignCount) {
-      alert('Yeterli sayıda yeni görev atanabilecek kişi kalmadı.');
-      setLoading(false);
-      return;
+      setUsedUsernames([]); // ✅ rotation reset
+      finalMembers = [...members].sort(() => 0.5 - Math.random()).slice(0, assignCount);
+    } else {
+      finalMembers = [...availableMembers].sort(() => 0.5 - Math.random()).slice(0, assignCount);
     }
 
-    const shuffled = [...availableMembers].sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, assignCount);
     const shuffledPlaces = [...places].sort(() => 0.5 - Math.random());
+    const now = Timestamp.now();
+    const nowStr = new Date().toDateString();
     const newTasks: CleaningTask[] = [];
 
-    for (let i = 0; i < selected.length; i++) {
-      const user = selected[i];
+    for (let i = 0; i < finalMembers.length; i++) {
+      const user = finalMembers[i];
 
       const task = {
         id: '',
         atanan: user.name,
-        tarih: Timestamp.now(),
+        tarih: now,
         durum: 'beklemede',
         yer: shuffledPlaces[i]?.name || '-',
         email: user.email,
@@ -127,26 +133,23 @@ export default function CleaningTasks() {
       };
 
       try {
-        const docRef = await addDoc(collection(db, 'temizlikGorevleri'), task);
-        await addDoc(collection(db, `users/${user.id}/tasks`), {
-          ...task,
+        const docRef = await addDoc(collection(db, `tasks/${companyID}/temizlikGorevListesi`), task);
+        await updateDoc(doc(db, `tasks/${companyID}/temizlikGorevListesi`, docRef.id), {
           id: docRef.id,
         });
-
         newTasks.push({ ...task, id: docRef.id });
       } catch (error) {
-        console.error(`Görev eklenemedi:`, error);
+        console.error('Görev eklenemedi:', error);
       }
     }
 
-    setTasks((prev) => [
-      ...prev.filter((t) => new Date(t.tarih?.seconds * 1000).toDateString() !== todayStr),
-      ...newTasks,
-    ]);
-
-    setTasksAssigned(true);
+    // ✅ Yeni atananları kayıt altına al
+    setUsedUsernames((prev) => [...prev, ...finalMembers.map((m) => m.name)]);
+    setTasks(newTasks);
+    setLastAssignedDate(nowStr);
     setLoading(false);
   };
+
 
   const addPlace = async () => {
     if (!newPlace.trim() || !companyID) return;
@@ -167,12 +170,8 @@ export default function CleaningTasks() {
   };
 
   const approveTask = async (task: CleaningTask) => {
-    await updateDoc(doc(db, 'temizlikGorevleri', task.id), { durum: 'onaylandı' });
-
-    setTasks((prev) =>
-      prev.map((t) => (t.id === task.id ? { ...t, durum: 'onaylandı' } : t))
-    );
-
+    await updateDoc(doc(db, `tasks/${companyID}/temizlikGorevListesi/${task.id}`), { durum: 'onaylandı' });
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, durum: 'onaylandı' } : t)));
     await approveTaskAndAssignToUser({
       ...task,
       assignedEmail: task.email,
@@ -228,45 +227,48 @@ export default function CleaningTasks() {
         Aynı kişiye birden fazla görev atanmasına izin ver
       </label>
 
-      {!tasksAssigned ? (
-        <p className="text-sm text-gray-500">Henüz görev ataması yapılmadı.</p>
-      ) : (
-        <div className="space-y-4">
-          {tasks
-            .filter((task) => new Date(task.tarih?.seconds * 1000).toDateString() === todayStr)
-            .map((task, index) => (
-              <div key={index} className="flex justify-between items-center border-b pb-2 last:border-none">
-                <div>
-                  <p className="text-sm font-medium">Atanan: {task.atanan}</p>
-                  <p className="text-xs text-gray-500">Yer: {task.yer || '-'}</p>
-                  <p className="text-xs text-gray-500">
-                    Tarih: {new Date(task.tarih?.seconds * 1000).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`text-xs px-2 py-1 rounded-full font-medium ${task.durum === 'tamamlandı'
-                        ? 'bg-green-100 text-green-800'
-                        : task.durum === 'onaylandı'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}
-                  >
-                    {task.durum}
-                  </span>
-                  {task.durum === 'beklemede' && (
-                    <button
-                      onClick={() => approveTask(task)}
-                      className="text-xs bg-blue-500 text-white px-3 py-1 rounded"
-                    >
-                      Onayla
-                    </button>
-                  )}
-                </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        {tasks
+          .filter((task) =>
+            lastAssignedDate
+              ? new Date(task.tarih?.seconds * 1000).toDateString() === lastAssignedDate
+              : false
+          )
+          .map((task) => (
+            <div
+              key={task.id}
+              className="bg-white rounded-xl shadow p-5 flex flex-col justify-between border"
+            >
+              <div>
+                <p className="text-sm font-medium">Atanan: {task.atanan}</p>
+                <p className="text-xs text-gray-500">Yer: {task.yer || '-'}</p>
+                <p className="text-xs text-gray-500">
+                  Tarih: {new Date(task.tarih?.seconds * 1000).toLocaleDateString()}
+                </p>
               </div>
-            ))}
-        </div>
-      )}
+              <div className="flex items-center justify-between mt-2">
+                <span
+                  className={`text-xs px-2 py-1 rounded-full font-medium ${task.durum === 'tamamlandı'
+                    ? 'bg-green-100 text-green-800'
+                    : task.durum === 'onaylandı'
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-gray-100 text-gray-800'
+                    }`}
+                >
+                  {task.durum}
+                </span>
+                {task.durum === 'beklemede' && (
+                  <button
+                    onClick={() => approveTask(task)}
+                    className="text-xs bg-blue-500 text-white px-3 py-1 rounded"
+                  >
+                    Onayla
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+      </div>
     </div>
   );
 }
