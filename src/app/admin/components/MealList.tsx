@@ -3,6 +3,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { db } from '../../lib/firebase';
 import {
   collection,
   getDocs,
@@ -15,7 +16,6 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { db } from '../../lib/firebase';
 import { approveTaskAndAssignToUser } from '../components/utils/approveTaskAndAssign';
 
 interface MealTask {
@@ -103,8 +103,8 @@ export default function MealTasks() {
     const allTasks = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as MealTask[];
 
     const availableMembers = members.filter((m) => !usedUsernames.includes(m.name));
-
     let finalMembers: typeof members;
+
     if (availableMembers.length < assignCount) {
       setUsedUsernames([]);
       finalMembers = [...members].sort(() => 0.5 - Math.random()).slice(0, assignCount);
@@ -201,7 +201,7 @@ export default function MealTasks() {
           type="text"
           value={newPlace}
           onChange={(e) => setNewPlace(e.target.value)}
-          placeholder="örn. çorba hazırlığı"
+          placeholder="örn. yemek hazırlığı"
           className="border px-3 py-1 rounded w-full"
         />
         <div className="flex gap-2">
