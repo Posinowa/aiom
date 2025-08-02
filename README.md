@@ -10,6 +10,7 @@
 
 ### 2. Rol Tabanlı Yapı: Admin ve Member
 
+
 **Admin:**
 
 * Tüm çalışanların giriş-çıkış bilgilerini ve görev geçmişini görebilir.
