@@ -29,6 +29,7 @@
 
 ### 3. Giriş - Çıkış Takibi (Yüz Tanıma ile)
 
+
 Sabah ofise gelen bir çalışan, giriş noktasındaki güvenlik kamerası ya da görüntü aktaran cihaz tarafından otomatik olarak tanınır.
 Yüz tanıma sistemi, kullanıcının:
 
