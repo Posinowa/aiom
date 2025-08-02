@@ -23,12 +23,12 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
-          install_components: 'beta'  # bazen gerekebiliyor
+          install_components: 'beta'
 
       - name: Deploy to Cloud Run
         run: |
-          gcloud run deploy ${{ secrets.GCP_SERVICE }} \
+          gcloud run deploy aiom-site \
             --source . \
-            --region ${{ secrets.GCP_REGION }} \
+            --region europe-west1 \
             --platform managed \
             --allow-unauthenticated
