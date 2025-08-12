@@ -62,8 +62,28 @@ export default function LoginPage() {
       document.cookie = `companyID=${userData.companyID}; path=/`;
 
       router.push('/member');
+
     } catch (err) {
-      toast.error('Giriş başarısız: ' + (err as Error).message);
+      const error = (err as any).code;
+
+      switch (error) {
+        case 'auth/invalid-email':
+          toast.error('Geçersiz e-posta adresi.');
+          break;
+        case 'auth/user-not-found':
+          toast.error('Böyle bir kullanıcı bulunamadı.');
+          break;
+        case 'auth/wrong-password':
+        case 'auth/invalid-credential':
+          toast.error('Parola hatalı.');
+          break;
+        case 'auth/too-many-requests':
+          toast.error('Çok fazla deneme yapıldı. Lütfen biraz bekleyin.');
+          break;
+        default:
+          toast.error('Giriş başarısız: ' + error);
+          break;
+      }
     }
   };
 

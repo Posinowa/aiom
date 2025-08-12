@@ -23,21 +23,15 @@ export async function approveTaskAndAssignToUser(task: any) {
         // Görev tipi (temizlik / yemek) göre path belirle
         const koleksiyonAdi = tip === 'yemek' ? 'yemekGorevListesi' : 'temizlikGorevListesi';
 
-        // Firestore görev belgesini güncelle
-        const taskRef = doc(db, `tasks/${companyID}/${koleksiyonAdi}`, id);
+        // 🔧 Firestore görev belgesini GÜNCEL path ile oluştur
+        const taskRef = doc(db, 'tasks', companyID, koleksiyonAdi, id);
+
         await updateDoc(taskRef, {
             durum: 'onaylandı',
             assignedAt: serverTimestamp(),
         });
 
         console.log(`✅ Görev "${id}" onaylandı → ${koleksiyonAdi}`);
-
-        // İstersen burada log kaydı da ekleyebilirsin:
-        // await addDoc(collection(db, 'gorevGecmisi'), {
-        //   atanan: task.atanan,
-        //   tarih: task.tarih,
-        //   gorev: tip,
-        // });
 
     } catch (err) {
         console.error("❌ Görev onaylama hatası:", err);

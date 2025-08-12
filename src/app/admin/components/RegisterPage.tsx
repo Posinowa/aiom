@@ -10,6 +10,7 @@ import {
 import { auth, db } from '../../lib/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { User, Mail, Lock } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -17,10 +18,20 @@ export default function RegisterPage() {
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [gender, setGender] = useState<'male' | 'female'>('male'); // ✅ varsayılan değer
 
   const handleRegister = async () => {
     if (password !== confirmPassword) {
-      alert('Parolalar eşleşmiyor.');
+      toast.error('Parolalar eşleşmiyor.');
+      return;
+    }
+
+    if (!email.includes('@') || !email.includes('.')) {
+      toast.error('Geçerli bir e-posta adresi giriniz.');
+      return;
+    }
+    if (!displayName.trim()) {
+      toast.error('İsim alanı boş bırakılamaz.');
       return;
     }
 
@@ -32,7 +43,6 @@ export default function RegisterPage() {
         displayName: displayName,
       });
 
-      // Firestore → users/{uid} altında kullanıcıyı oluştur
       await setDoc(doc(db, 'users', user.uid), {
         uid: user.uid,
         email,
@@ -40,18 +50,36 @@ export default function RegisterPage() {
         role: 'member',
         isPresent: true,
         companyID: 'defaultCompany',
+        gender, // ✅ gender Firestore'a kaydediliyor
         createdAt: serverTimestamp(),
       });
 
       await sendEmailVerification(user);
       await auth.signOut();
 
-      alert('Kayıt başarılı! E-posta doğrulama bağlantısı gönderildi. Lütfen e-postanızı onaylayın.');
+      toast.success('Kayıt başarılı! E-posta doğrulama bağlantısı gönderildi.');
       router.push('/');
-
-    } catch (error) {
-      alert('Kayıt başarısız: ' + (error as Error).message);
+    } catch (error: any) {
+      switch (error.code) {
+        case 'auth/invalid-email':
+          toast.error('Geçersiz e-posta adresi.');
+          break;
+        case 'auth/email-already-in-use':
+          toast.error('Bu e-posta zaten kullanılıyor.');
+          break;
+        case 'auth/weak-password':
+          toast.error('Parola en az 6 karakter olmalıdır.');
+          break;
+        default:
+          toast.error('Hata: ' + error.message);
+      }
     }
+  };
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const noNumbers = value.replace(/[0-9]/g, '');
+    setDisplayName(noNumbers);
   };
 
   return (
@@ -67,7 +95,7 @@ export default function RegisterPage() {
             type="text"
             placeholder="Full Name"
             value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
+            onChange={handleNameChange}
             className="w-full pl-10 pr-4 py-2 border rounded focus:outline-none bg-white text-black"
           />
         </div>
@@ -94,7 +122,7 @@ export default function RegisterPage() {
           />
         </div>
 
-        <div className="mb-6 relative">
+        <div className="mb-4 relative">
           <Lock className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
           <input
             type="password"
@@ -103,6 +131,19 @@ export default function RegisterPage() {
             onChange={(e) => setConfirmPassword(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border rounded focus:outline-none bg-white text-black"
           />
+        </div>
+
+        {/* ✅ Gender seçimi alanı */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Cinsiyet</label>
+          <select
+            value={gender}
+            onChange={(e) => setGender(e.target.value as 'male' | 'female')}
+            className="w-full border rounded px-3 py-2 bg-white text-black"
+          >
+            <option value="male">Erkek</option>
+            <option value="female">Kadın</option>
+          </select>
         </div>
 
         <button

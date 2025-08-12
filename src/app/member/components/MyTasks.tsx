@@ -5,13 +5,17 @@ import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db } from '../../lib/firebase';
 import {
     collection,
-    getDocs,
-    updateDoc,
-    doc,
-    addDoc,
     query,
     where,
+    onSnapshot,
+    doc,
+    getDocs,
+    getDoc,
+    updateDoc,
+    addDoc,
+    serverTimestamp,
 } from 'firebase/firestore';
+import { toast } from 'react-hot-toast';
 
 interface Task {
     id: string;
@@ -20,6 +24,8 @@ interface Task {
     durum: string;
     yer: string;
     tip: 'yemek' | 'temizlik';
+    source: 'old' | 'weekly';
+    weekDate?: string;
 }
 
 export default function MyTasks() {
@@ -27,6 +33,14 @@ export default function MyTasks() {
     const [userInfo, setUserInfo] = useState<{ uid: string; name: string; companyID: string } | null>(null);
     const auth = getAuth();
 
+    const getWeekDate = () => {
+        const today = new Date();
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - today.getDay() + 1); // Pazartesi
+        return monday.toISOString().split('T')[0];
+    };
+
+    // Kullanıcı bilgilerini dinle
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -42,130 +56,204 @@ export default function MyTasks() {
                 }
             }
         });
-
         return () => unsubscribe();
     }, []);
 
+    // Görevleri realtime (onSnapshot) dinle
     useEffect(() => {
         if (!userInfo) return;
+        const { companyID, name } = userInfo;
+        const weekDate = getWeekDate();
 
-        const fetchTasks = async () => {
-            const { companyID, name } = userInfo;
+        // Sadece bu kullanıcının görevlerini filtreleyen sorgular
+        const oldTemizlikQuery = query(
+            collection(db, `tasks/${companyID}/temizlikGorevListesi`),
+            where('atanan', '==', name)
+        );
+        const oldYemekQuery = query(
+            collection(db, `tasks/${companyID}/yemekGorevListesi`),
+            where('atanan', '==', name)
+        );
 
-            const temizlikRef = collection(db, `tasks/${companyID}/temizlikGorevListesi`);
-            const yemekRef = collection(db, `tasks/${companyID}/yemekGorevListesi`);
-
-            const temizlikSnap = await getDocs(query(temizlikRef, where('atanan', '==', name)));
-            const yemekSnap = await getDocs(query(yemekRef, where('atanan', '==', name)));
-
-            const temizlikTasks = temizlikSnap.docs.map((doc) => ({
+        // Real-time dinleme için unsubscribeler
+        const unsubTemizlik = onSnapshot(oldTemizlikQuery, (snapshot) => {
+            const temizlikTasks = snapshot.docs.map((doc) => ({
                 id: doc.id,
                 ...doc.data(),
                 tip: 'temizlik',
+                source: 'old',
             })) as Task[];
 
-            const yemekTasks = yemekSnap.docs.map((doc) => ({
+            setTasks((prev) => {
+                // Günlük temizlik görevlerini güncelle, diğer görevleri koru
+                const otherTasks = prev.filter((t) => t.tip !== 'temizlik' || t.source !== 'old');
+                return [...otherTasks, ...temizlikTasks];
+            });
+        });
+
+        const unsubYemek = onSnapshot(oldYemekQuery, (snapshot) => {
+            const yemekTasks = snapshot.docs.map((doc) => ({
                 id: doc.id,
                 ...doc.data(),
                 tip: 'yemek',
+                source: 'old',
             })) as Task[];
 
-            setTasks([...temizlikTasks, ...yemekTasks]);
-        };
+            setTasks((prev) => {
+                // Günlük yemek görevlerini güncelle, diğer görevleri koru
+                const otherTasks = prev.filter((t) => t.tip !== 'yemek' || t.source !== 'old');
+                return [...otherTasks, ...yemekTasks];
+            });
+        });
 
-        fetchTasks();
+        // Haftalık görevler için dinlemeyi da ekleyelim
+        const weeklyTemizlikRef = doc(db, `weeklyTasks/${companyID}/${weekDate}/temizlikListesi`);
+        const weeklyYemekRef = doc(db, `weeklyTasks/${companyID}/${weekDate}/yemekListesi`);
+
+
+        // Temizleme
+        return () => {
+            unsubTemizlik();
+            unsubYemek();
+        };
     }, [userInfo]);
+
+    // Görevlerim ekranında sadece bugünkü görevlerin görünmesi için filtre uyguluyoruz
+    const todayStr = new Date().toDateString();
+    const filteredTasks = tasks.filter((task) => {
+        const taskDate = task.tarih?.seconds ? new Date(task.tarih.seconds * 1000).toDateString() : '';
+        return taskDate === todayStr && task.durum === 'onaylandı'; // ✅ sadece onaylananlar gösterilir
+    });
+
 
     const markAsDone = async (task: Task) => {
         if (!userInfo) return;
+        const { companyID } = userInfo;
 
-        const ref = doc(db, `tasks/${userInfo.companyID}/${task.tip === 'yemek' ? 'yemekGorevListesi' : 'temizlikGorevListesi'}/${task.id}`);
-        await updateDoc(ref, { durum: 'tamamlandı' });
+        try {
+            // 🔹 GÖREV DURUMUNU GÜNCELLE
+            if (task.source === 'old') {
+                const ref = doc(
+                    db,
+                    `tasks/${companyID}/${task.tip === 'yemek' ? 'yemekGorevListesi' : 'temizlikGorevListesi'}/${task.id}`
+                );
+                const snap = await getDoc(ref);
+                if (snap.exists()) {
+                    await updateDoc(ref, { durum: 'tamamlandı' });
+                }
+            } else if (task.source === 'weekly' && task.weekDate) {
+                const ref = doc(
+                    db,
+                    `weeklyTasks/${companyID}/${task.weekDate}/${task.tip === 'yemek' ? 'yemekListesi' : 'temizlikListesi'}`
+                );
+                const snap = await getDoc(ref);
+                if (!snap.exists()) return;
 
-        await addDoc(collection(db, 'gorevGecmisi'), {
-            atanan: task.atanan,
-            tarih: task.tarih,
-            gorev: task.tip,
-        });
+                const data = snap.data();
+                const listKey = task.tip === 'yemek' ? 'yemekGorevListesi' : 'temizlikGorevListesi';
+                const originalList = data[listKey] || [];
 
-        setTasks((prev) =>
-            prev.map((t) => (t.id === task.id ? { ...t, durum: 'tamamlandı' } : t))
-        );
-    };
+                const updatedList = originalList.map((t: any) =>
+                    t.atanan === task.atanan && t.tarih?.seconds === task.tarih?.seconds
+                        ? { ...t, durum: 'tamamlandı' }
+                        : t
+                );
+                await updateDoc(ref, { [listKey]: updatedList });
+            }
 
-    const groupedTasks = {
-        yemek: tasks.filter((t) => t.tip === 'yemek'),
-        temizlik: tasks.filter((t) => t.tip === 'temizlik'),
+            // 🔒 TEKRAR KAYIT KONTROLÜ
+            const existingQuery = query(
+                collection(db, 'gorevGecmisi'),
+                where('atanan', '==', task.atanan),
+                where('tarih', '==', task.tarih),
+                where('gorev', '==', task.tip)
+            );
+            const existingSnap = await getDocs(existingQuery);
+
+            if (existingSnap.empty) {
+                await addDoc(collection(db, 'gorevGecmisi'), {
+                    atanan: task.atanan,
+                    tarih: task.tarih,
+                    gorev: task.tip,
+                    createdAt: serverTimestamp(),
+
+                });
+
+                // ✅ TAM BURADA TOAST GÖSTER
+                toast.success(`✅ ${task.tip === 'temizlik' ? 'Temizlik' : 'Yemek'} görevin başarıyla tamamlandı!`);
+            }
+
+            // 🔄 LOKAL STATE GÜNCELLE
+            setTasks((prev) =>
+                prev.map((t) => (t.id === task.id ? { ...t, durum: 'tamamlandı' } : t))
+            );
+        } catch (err) {
+            console.error('markAsDone hatası:', err);
+        }
     };
 
     return (
         <div className="p-4">
-            <h2 className="text-3xl font-bold mb-6">My Tasks</h2>
+            <h2 className="text-2xl font-semibold mb-4">Görevlerim</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {filteredTasks.map((task) => {
+                    const timestamp = task.tarih?.seconds ? new Date(task.tarih.seconds * 1000) : null;
+                    const formattedDate = timestamp
+                        ? timestamp.toLocaleDateString('tr-TR', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                        })
+                        : 'Tarih yok';
 
-            {tasks.length === 0 ? (
-                <p className="text-gray-500 bg-white p-4 rounded shadow">
-                    Şu anda atanan bir göreviniz yok.
-                </p>
-            ) : (
-                <div className="space-y-8">
-                    {(['yemek', 'temizlik'] as const).map((tip) => (
-                        groupedTasks[tip].length > 0 && (
-                            <div key={tip}>
-                                <h3 className="text-xl font-semibold mb-2 text-gray-800 border-b pb-1">
-                                    {tip === 'yemek' ? '🍽️ Yemek Görevleri' : '🧼 Temizlik Görevleri'}
-                                </h3>
-                                <div className="space-y-4">
-                                    {groupedTasks[tip].map((task) => {
-                                        const timestamp = task.tarih?.seconds
-                                            ? new Date(task.tarih.seconds * 1000)
-                                            : null;
+                    const badgeText = task.tip === 'temizlik' ? '🧼 Temizlik Görevi' : '🍽️ Yemek Görevi';
+                    const badgeColor = task.tip === 'temizlik' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800';
 
-                                        const formattedDate = timestamp
-                                            ? timestamp.toLocaleDateString('tr-TR', {
-                                                year: 'numeric',
-                                                month: 'short',
-                                                day: 'numeric',
-                                            })
-                                            : 'Tarih yok';
+                    return (
+                        <div
+                            key={task.id}
+                            className="bg-white rounded-xl shadow p-5 border flex flex-col justify-between"
+                        >
+                            {/* Görev Kaynağı Etiketi */}
+                            <span
+                                className={`text-xs font-semibold px-2 py-1 rounded-full self-start mb-2 ${badgeColor}`}
+                            >
+                                {badgeText}
+                            </span>
 
-                                        const durumRengi =
-                                            task.durum === 'tamamlandı'
-                                                ? 'bg-green-100 text-green-800'
-                                                : task.durum === 'onaylandı'
-                                                    ? 'bg-blue-100 text-blue-800'
-                                                    : 'bg-orange-100 text-orange-800';
-
-                                        return (
-                                            <div
-                                                key={task.id}
-                                                className="bg-white rounded-xl shadow p-5 flex justify-between items-center border"
-                                            >
-                                                <div className="flex items-center space-x-2">
-                                                    <div
-                                                        className={`text-xs inline-block px-3 py-1 rounded-full font-medium ${durumRengi}`}
-                                                    >
-                                                        {task.durum}
-                                                    </div>
-                                                    <div className="text-sm text-gray-500">{formattedDate}</div>
-                                                    {task.durum === 'onaylandı' && (
-                                                        <button
-                                                            onClick={() => markAsDone(task)}
-                                                            className="text-xs bg-green-600 text-white px-3 py-1 rounded"
-                                                        >
-                                                            Tamamla
-                                                        </button>
-                                                    )}
-                                                </div>
-
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                            {/* Bilgiler */}
+                            <div className="space-y-1">
+                                <p className="text-sm font-medium">Atanan: {task.atanan}</p>
+                                <p className="text-xs text-gray-500">Yer: {task.yer || '-'}</p>
+                                <p className="text-xs text-gray-500">Tarih: {formattedDate}</p>
                             </div>
-                        )
-                    ))}
-                </div>
-            )}
+
+                            {/* Buton ve Durum */}
+                            <div className="flex items-center justify-between mt-3">
+                                <span
+                                    className={`text-xs px-2 py-1 rounded-full font-medium ${task.durum === 'tamamlandı'
+                                        ? 'bg-green-100 text-green-800'
+                                        : task.durum === 'onaylandı'
+                                            ? 'bg-blue-100 text-blue-800'
+                                            : 'bg-gray-100 text-gray-800'
+                                        }`}
+                                >
+                                    {task.durum}
+                                </span>
+                                {task.durum === 'onaylandı' && (
+                                    <button
+                                        onClick={() => markAsDone(task)}
+                                        className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded"
+                                    >
+                                        Tamamla
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
+
+            </div>
         </div>
     );
 }
